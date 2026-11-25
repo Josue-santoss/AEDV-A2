@@ -48,18 +48,6 @@ O estudo é **estritamente descritivo e exploratório**: os padrões e associaç
 - **Municípios (P6):** a participação da MDIP chegou a 55,7% em Niterói (2023) e 48,7% em São Gonçalo (2021); em Campos dos Goytacazes o máximo foi 3,6%.
 - **Policiais mortos (P7):** em nível, a correlação com a letalidade no mês seguinte é 0,415 (tendência histórica compartilhada); em primeiras diferenças, cai para 0,005.
 
----
-
-## Estrutura do repositório
-
-| Arquivo / pasta | Conteúdo |
-|---|---|
-| `NotebookAEDV.ipynb` | Notebook exploratório completo: 15 etapas de preparação e auditoria de dados, seguidas das sete perguntas, com tabelas intermediárias e mapas interativos com mapa base. |
-| `NotebookArtigo.ipynb` | Versão em formato de artigo, para publicação via Quarto, com mapas vetoriais autocontidos. |
-| `documentacao.tex` | Documentação técnica e metodológica do código (arquitetura, pipeline, decisões metodológicas e referência das 13 funções). |
-| `Projeto/Datas/` | CSVs do ISP-RJ e shapefiles compactados (`CISP.zip`, `AISP.zip`, `RISP.zip`). |
-
----
 
 ## Dados
 
