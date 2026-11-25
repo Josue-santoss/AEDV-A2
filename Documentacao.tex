@@ -1,0 +1,346 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[T1]{fontenc}
+\renewcommand{\contentsname}{Sumário}
+\renewcommand{\tablename}{Tabela}
+\renewcommand{\abstractname}{Resumo}
+\usepackage{charter}
+\usepackage[a4paper,margin=22mm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{microtype}
+\usepackage[hidelinks]{hyperref}
+
+\setlength{\parskip}{6pt plus 2pt minus 1pt}
+\setlength{\parindent}{0pt}
+
+\newcommand{\code}[1]{{\ttfamily\footnotesize\allowbreak #1}}
+
+\newcommand{\funcblock}[5]{%
+  \vspace{5pt}\noindent{\raggedright\bfseries\ttfamily\footnotesize #1\par}%
+  \vspace{1pt}\noindent\textit{#2}\par
+  \begin{itemize}
+    \setlength{\itemsep}{2pt}\setlength{\parskip}{0pt}
+    \item \textbf{Parâmetros:} #3
+    \item \textbf{Retorno:} #4
+    \item \textbf{Exceções:} #5
+  \end{itemize}
+}
+
+\sloppy
+
+\begin{document}
+
+% --- Página de Capa ---
+\begin{titlepage}
+  \centering
+  \vspace*{1.2cm}
+
+  {\scshape\large Fundação Getulio Vargas --- FGV EMAp\par}
+  \vspace{0.25cm}
+  {\normalsize Escola de Matemática Aplicada\par}
+  \vspace{0.15cm}
+  {\normalsize Análise Exploratória de Dados e Visualização \par}
+
+  \vspace{3.0cm}
+
+  \rule{\linewidth}{0.8pt}\par
+  \vspace{0.6cm}
+  {\LARGE\bfseries Documentação Técnica e Metodológica do Código\par}
+  \vspace{0.45cm}
+  {\large Dinâmica da Criminalidade no Rio de Janeiro:\\
+  Uma Análise Integrada Sobre Segurança Pública\par}
+  \vspace{0.6cm}
+  \rule{\linewidth}{0.8pt}\par
+
+  \vspace{2.6cm}
+
+  {\normalsize\textbf{Autores}\par}
+  \vspace{0.3cm}
+  {\normalsize
+    Josué Santos de Oliveira da Silva\\
+    Leonardo Cardia Bicca\\
+    Luigi Parmeggiani Porto\par
+  }
+
+  \vspace{1.2cm}
+
+  {\normalsize\textbf{Professor}\par}
+  \vspace{0.2cm}
+  {\normalsize João Rulff\par}
+
+  \vfill
+
+  {\small\textbf{Repositório oficial:} [https://github.com/Josue-santoss/AEDV-A2.git]\par}
+  \vspace{0.3cm}
+  {\small Rio de Janeiro --- RJ\par}
+\end{titlepage}
+
+\begin{abstract}
+Esta documentação descreve a arquitetura computacional, o pipeline completo de preparação e tratamento de dados, as decisões metodológicas de código e de design visual e a referência integral das 13 funções implementadas no projeto.
+\end{abstract}
+
+\tableofcontents
+\vspace{8pt}
+
+\section{Visão Geral e Requisitos de Execução}
+
+Todo o fluxo de ingestão, padronização, integração geoespacial, cálculo de indicadores e visualização interativa sobre os dados abertos do Instituto de Segurança Pública do Estado do Rio de Janeiro (ISP-RJ) é autossuficiente a partir do repositório oficial no GitHub ([https://github.com/Josue-santoss/AEDV-A2.git]).
+
+\textbf{Ambiente e reprodutibilidade:} requer Python 3.10+ e as bibliotecas \code{requests}, \code{numpy}, \code{pandas}, \code{geopandas}, \code{matplotlib}, \code{seaborn} e \code{plotly}. 
+
+\section{Preparação das Bases de Dados (Etapas 1 a 15)}
+
+Esta seção documenta integralmente a \textbf{camada comum de dados} executada antes das perguntas de pesquisa e visualizações. Cada tabela derivada possui uma granularidade definida (por exemplo, uma linha por \code{ano} e \code{id\_aisp}) e é reutilizada ao longo de todo o estudo.
+
+\textbf{Princípios adotados:} preservar as bases originais em \code{dataframes\_brutos}, manter as versões tratadas em \code{dataframes}, separar limpeza de relacionamento territorial, construir indicadores uma única vez e registrar lacunas de cobertura sem inventar observações.
+
+
+
+\subsection{1. Bibliotecas e configuração}
+Centraliza as importações (\code{BytesIO}, \code{ZipFile}, \code{os}, \code{tempfile}, \code{unicodedata}, \code{warnings}, \code{requests}, \code{numpy}, \code{pandas}, \code{geopandas}, \code{matplotlib}, \code{seaborn} e \code{plotly}), a supressão do aviso \code{RuntimeWarning} referente aos arquivos de dados do GDAL, as constantes de acesso ao repositório oficial, a identidade visual acessível (paleta Okabe-Ito) e as cinco funções utilitárias básicas (\code{exigir\_colunas}, \code{taxa\_por\_100\_mil}, \code{agregar\_contagens\_aisp\_ano}, \code{formatar\_numero} e \code{adicionar\_fonte\_plotly}). O estilo global do Matplotlib remove bordas superior e direita, adota fundo branco e grade cinza clara; o Plotly utiliza o template \code{plotly\_white}.
+
+\begin{table}[!htbp]
+\centering
+\caption{Constantes globais de configuração e identidade visual.}
+\label{tab:constantes}
+{\footnotesize\begin{tabularx}{\linewidth}{>{\raggedright\arraybackslash}p{4.0cm} >{\raggedright\arraybackslash}p{4.4cm} >{\raggedright\arraybackslash}X}
+\toprule
+\textbf{Constante} & \textbf{Tipo / Valor} & \textbf{Finalidade} \\
+\midrule
+\code{REPOSITORIO\_DADOS} & \code{"Josue-santoss/AEDV-A2"} & Identificador \code{usuario/repositorio} no GitHub. \\
+\code{BRANCH\_DADOS} & \code{"main"} & Branch de referência para CSVs e shapefiles. \\
+\code{PASTA\_DADOS\_ZIP} & \code{"/Projeto/Datas/"} & Subcaminho filtrado dentro do ZIP baixado. \\
+\code{PREFIXO\_CSV} & \code{"br\_rj\_isp\_estatisticas\_"} \code{"seguranca\_"} & Prefixo removido ao gerar as chaves de \code{dataframes}. \\
+\code{FATOR\_TAXA} & \code{100\_000} & Fator padrão de padronização por 100 mil habitantes. \\
+\code{URL\_ZIP\_DADOS} & URL derivada & Endereço do arquivo ZIP do repositório. \\
+\code{URL\_BASE\_SHAPEFILES} & URL derivada & Base \code{raw.githubusercontent.com} dos shapefiles. \\
+\code{PALETA} & \code{dict[str, str]} & Paleta acessível Okabe-Ito e tons neutros. \\
+\code{PALETA\_REGIOES} & \code{dict[str, str]} & Cores fixas para Capital, Baixada, Grande Niterói e Interior. \\
+\code{FONTE\_PADRAO} & \code{str} & Atribuição padrão institucional (ISP-RJ). \\
+\bottomrule
+\end{tabularx}}
+\end{table}
+
+\subsection{2. Carregamento e catálogo das bases}
+A função \code{carregar\_csvs\_do\_repositorio} baixa o arquivo \code{.zip} do GitHub em memória, identifica automaticamente todos os arquivos \code{.csv} dentro de \code{/Projeto/Datas/}, remove a extensão e o prefixo padrão e lê cada tabela com detecção automática de separador (\code{sep=None, engine="python"}), disparando \code{ValueError} em caso de nome duplicado ou ausência de arquivos.
+
+São importadas \textbf{16 bases} em \code{dataframes\_brutos}: \code{PopulacaoEvolucaoMensalCisp}, \code{PopulacaoEvolucaoMensalMunic}, \code{armas\_apreendidas\_mensal}, \code{armas\_fogo\_apreendidas\_mensal}, \code{evolucao\_mensal\_cisp}, \code{evolucao\_mensal\_municipio}, \code{evolucao\_mensal\_uf}, \code{evolucao\_mensal\_upp}, \code{evolucao\_policial\_morto\_servico\_mensal}, \code{feminicidio\_mensal\_cisp}, \code{relacao\_cisp\_aisp\_risp}, \code{taxa\_evolucao\_anual\_municipio}, \code{taxa\_evolucao\_anual\_uf}, \code{taxa\_evolucao\_mensal\_municipio}, \code{taxa\_evolucao\_mensal\_uf} e \code{taxa\_letalidade}.
+
+\subsection{3. Limpeza e padronização}
+A rotina \code{limpar\_bases\_isp} gera \textbf{cópias} independentes em \code{dataframes}, mantendo \code{dataframes\_brutos} intacto. Para cada base:
+\begin{enumerate}
+  \setlength{\itemsep}{2pt}\setlength{\parskip}{0pt}
+  \item Remove espaços nas extremidades dos nomes de colunas (\code{str.strip()}) e em colunas textuais (\code{object}/\code{string}) sem converter \code{NaN} na string \code{"nan"}.
+  \item Corrige problemas de codificação e grafia em \code{regiao} via \code{CORRECOES\_REGIAO} (unificando variantes como \code{"Grande Niteroi"} em \code{"Grande Niterói"}).
+  \item \textbf{Critério de imputação:} preenche ausências com zero \textbf{somente} em colunas numéricas iniciadas por \code{quantidade\_}, assumindo ausência de registro de ocorrência naquele recorte e preservando ausências em chaves, populações e taxas.
+  \item Converte \code{ano} e \code{mes} para \code{int64} com \code{errors="raise"} e cria a coluna \code{data} (primeiro dia do mês) quando ambos existem.
+\end{enumerate}
+
+\subsection{4. Referências às bases de trabalho}
+Define apelidos diretos para as nove tabelas efetivamente empregadas nas sete perguntas de domínio: \code{df\_armas}, \code{df\_cisp\_mensal}, \code{df\_mun\_mensal}, \code{df\_evol\_uf}, \code{df\_policial}, \code{df\_fem\_cisp}, \code{df\_rel}, \code{df\_taxa\_mun\_mensal} e \code{df\_letalidade}. Todas as 16 bases padronizadas permanecem disponíveis no dicionário \code{dataframes}, com inventário de dimensões (\code{linhas} e \code{colunas}) gerado em \code{inventario\_bases}.
+
+\subsection{5. Dimensão de nomes das AISPs}
+Centraliza uma fonte única de nomes de apresentação em \code{dim\_aisp} (colunas \code{id\_aisp}, \code{nome\_aisp} e \code{rotulo\_aisp} no formato \code{"AISP XX --- Nome"}), validando ausência de códigos duplicados. A tabela segue a referência oficial \textit{Relação RISP $\times$ AISP $\times$ CISP} do ISP-RJ (\url{https://www.ispdados.rj.gov.br/Arquivos/Relacao_RISPxAISPxCISP.pdf}) e inclui dois tratamentos históricos explícitos:
+\begin{itemize}
+  \setlength{\itemsep}{2pt}\setlength{\parskip}{0pt}
+  \item \textbf{AISP 1:} identificada dinamicamente pelas CISPs observadas em cada ano, distinguindo a configuração histórica da Capital (CISPs 6 e 7 --- Cidade Nova / Santa Teresa, 2003--2011) e a reativação do 1º BPM em São Gonçalo (CISPs 72 e 73 --- São Gonçalo / Neves).
+  \item \textbf{AISP 13:} cadastrada como \textit{Praça Tiradentes / Centro (extinta)}, referente ao extinto 13º BPM presente na série entre 2003 e 2011.
+\end{itemize}
+
+\subsubsection*{5.1. Chaves e nomes de colunas da população mensal}
+Cria a cópia de trabalho \code{df\_populacao\_mensal\_cisp} a partir de \code{dataframes["PopulacaoEvolucaoMensalCisp"]}, valida a presença de \code{circ} e \code{pop\_circ} e espelha essas colunas nas chaves padronizadas \code{id\_cisp} e \code{populacao}.
+
+\subsubsection*{5.2. Malhas geográficas (CISP, AISP, RISP)}
+Carrega os shapefiles oficiais compactados (\code{CISP.zip}, \code{AISP.zip} e \code{RISP.zip}) por meio de \code{carregar\_shapefile\_github}, padronizando as chaves (\code{id\_cisp}, \code{id\_aisp}, \code{id\_risp}) como \code{int64}, reprojetando para \code{EPSG:4326} e simplificando as geometrias preservando topologia (\code{tolerance=0.005}), resultando em \code{gdf\_cisp} (137 polígonos), \code{gdf\_aisp} (41 polígonos) e \code{gdf\_risp} (7 polígonos).
+
+\subsection{6. Relacionamentos territoriais (CISP, AISP e regiões)}
+Constrói as correspondências territoriais \textbf{antes} de qualquer cálculo de taxas. O Notebook valida \code{id\_cisp}, \code{id\_aisp} e \code{regiao} em \code{df\_rel} e lista as regiões cadastrais disponíveis em \code{aisps\_por\_regiao}.
+
+\subsubsection*{6.1. Dimensão de relacionamento CISP $\rightarrow$ AISP}
+Deriva \code{df\_mapa\_cisp\_aisp} do cadastro estático e verifica que nenhuma CISP está associada a mais de uma AISP. Para os indicadores históricos, constrói \code{mapa\_cisp\_aisp\_mensal} diretamente de \code{df\_cisp\_mensal} na granularidade \code{(ano, mes, id\_cisp)}, verificando ausência de chaves nulas e de dupla atribuição no mesmo mês. Constrói também \code{territorio\_aisp1}, registrando por ano as CISPs e os meses observados da AISP 1.
+
+\subsubsection*{6.2. Região de policiamento predominante por AISP}
+Enriquece \code{dim\_aisp} com a coluna \code{regiao\_predominante}, obtida pela moda da variável \code{regiao} em \code{df\_cisp\_mensal} para o período recente (\code{ano >= 2018}).
+
+\subsection{7. Padronização da população mensal por CISP}
+Na granularidade \code{(ano, mes, id\_cisp)}, substitui vírgula decimal por ponto em \code{df\_populacao\_mensal\_cisp["populacao"]}, converte para número com validação estrita contra valores ausentes ou negativos, trunca para \code{int64} e verifica a inexistência de registros duplicados para o mesmo \code{(ano, mes, id\_cisp)}.
+
+\subsection{8. População anual por CISP}
+No Notebook, na granularidade \code{(ano, id\_cisp)}, calcula \code{df\_populacao\_anual\_cisp} como a \textbf{média} dos valores mensais disponíveis de população (sem somar populações entre meses).
+
+\subsection{9. População anual por AISP}
+Realiza junção \code{outer} (\code{validate="one\_to\_one"}) entre \code{mapa\_cisp\_aisp\_mensal} e \code{df\_populacao\_mensal\_cisp}, isolando eventuais registros sem vínculo territorial em \code{populacao\_cisp\_sem\_aisp}. Em cada mês, soma a população das CISPs da AISP; um mês só contribui para a média anual se todas as suas CISPs possuírem população (\code{cisps == cisps\_com\_pop}), recebendo \code{NaN} caso contrário. A tabela \code{populacao\_por\_ano\_aisp} guarda a média anual desses totais mensais completos, acompanhada de \code{meses\_ativos}, \code{meses\_com\_populacao} e \code{nome\_aisp} (com resolução temporal para a AISP 1). Cobertura populacional por AISP: \textbf{2003--2022}.
+
+\subsection{10. População estadual}
+Isola \code{populacao\_uf\_anual} a partir de \code{df\_letalidade} filtrando \code{regiao == "Estado"}, removendo duplicatas por \code{ano} e ordenando cronologicamente (cobertura: \textbf{1991--2022}).
+
+\subsection{11. Contagens anuais de letalidade violenta por AISP}
+Agrega \code{quantidade\_letalidade\_violenta} de \code{df\_cisp\_mensal} por \code{(ano, id\_aisp)} via \code{agregar\_contagens\_aisp\_ano}, produzindo \code{mortes\_aisp\_ano} (com mapeamento de \code{nome\_aisp} e tratamento temporal da AISP 1) e a série estadual agregada \code{letalidade\_anual}, sem restrição fixa de período.
+
+\subsection{12. Painel AISP--ano e taxas por 100 mil habitantes}
+Restringe \code{mortes\_aisp\_ano} aos anos com cobertura populacional e integra com \code{populacao\_por\_ano\_aisp} (\code{how="left", validate="one\_to\_one"}) formando \code{estatisticas\_aisp}. Calcula \code{taxa\_letalidade} com \code{taxa\_por\_100\_mil} exigindo \textbf{12 meses de atividade territorial} (\code{meses\_ativos == 12}) e população média positiva; anos com atividade parcial permanecem com \code{NaN} para evitar taxas artificiais.
+
+\subsection{13. Verificações da cobertura do painel}
+O Notebook, executa auditoria sistemática do relacionamento mortes $\times$ população: verifica a distribuição de \code{\_merge} (788 linhas \code{both}, 0 \code{left\_only}, 0 \code{right\_only}), lista as 8 linhas sem taxa por atividade parcial (por exemplo, AISP 1 em 2011 com 18 vítimas entre janeiro e junho e AISP 13 em 2003 e 2011), confirma 0 CISPs/meses sem vínculo territorial, valida a cobertura de nomes em \code{dim\_aisp} e monta \code{auditoria\_aisp1} acompanhando todos os anos com ocorrências da AISP 1.
+
+\subsection{14. Resumo anual das taxas por AISP}
+Aplica \code{resumir\_taxas\_por\_ano} sobre \code{estatisticas\_aisp} para gerar \code{resumo\_estatistico}, contendo média, mediana, mínimo, máximo, quartis (Q1 e Q3), desvio-padrão populacional (\code{ddof=0}), variância, amplitude interquartil e coeficiente de variação percentual por ano. Essa tabela sintetiza a \textbf{dispersão entre AISPs} (heterogeneidade territorial), distinta da taxa estadual ponderada.
+
+\subsection{15. Contrato de dados para as análises}
+A Tabela~\ref{tab:contrato} consolida os objetos gerados na camada comum e suas granularidades para uso nas sete perguntas do projeto.
+
+\begin{table}[!htbp]
+\centering
+\caption{Contrato de dados da camada comum reutilizada nas análises.}
+\label{tab:contrato}
+{\footnotesize\begin{tabularx}{\linewidth}{>{\raggedright\arraybackslash}p{4.3cm} >{\raggedright\arraybackslash}p{3.0cm} >{\raggedright\arraybackslash}X}
+\toprule
+\textbf{Objeto} & \textbf{Granularidade} & \textbf{Uso previsto} \\
+\midrule
+\code{dataframes\_brutos} & Depende da fonte & 16 CSVs originais para auditoria e reprocessamento. \\
+\code{dataframes} & Depende da fonte & 16 bases padronizadas disponíveis para consulta. \\
+\code{df\_rel} & Conforme arquivo ISP & Relações territoriais de origem. \\
+\code{df\_mapa\_cisp\_aisp} & CISP & Cadastro de referência validado. \\
+\code{mapa\_cisp\_aisp\_mensal} & Ano, mês e CISP & AISP observada no mês para indicadores históricos. \\
+\code{dim\_aisp} & AISP & Nomes, \code{rotulo\_aisp} e \code{regiao\_predominante}. \\
+\code{gdf\_cisp}, \code{gdf\_aisp}, \code{gdf\_risp} & Polígono territorial & Malhas geográficas padronizadas (\code{EPSG:4326}). \\
+\code{df\_populacao\_mensal\_cisp} & Ano, mês e CISP & Série populacional mensal por delegacia. \\
+\code{df\_populacao\_anual\_cisp}* & Ano e CISP & Média anual das populações mensais por CISP. \\
+\code{populacao\_por\_ano\_aisp} & Ano e AISP & Denominador anual para indicadores por AISP. \\
+\code{populacao\_uf\_anual} & Ano & Denominador anual estadual (RJ). \\
+\code{mortes\_aisp\_ano} & Ano e AISP & Contagem anual de letalidade violenta. \\
+\code{estatisticas\_aisp} & Ano e AISP & Painel de métricas integradas com taxas válidas. \\
+\code{resumo\_estatistico} & Ano & Distribuição anual das taxas entre AISPs. \\
+\code{PALETA}, \code{PALETA\_REGIOES} & Constante global & Identidade visual acessível (Okabe-Ito). \\
+\bottomrule
+\end{tabularx}}
+\end{table}
+
+\section{Metodologia: Decisões de Código e de Visualização}
+
+Esta seção justifica as escolhas técnicas adotadas tanto na implementação estatística/computacional quanto no desenho visual dos gráficos.
+
+\subsection{Decisões de Engenharia de Código e Estatística}
+\begin{itemize}
+  \setlength{\itemsep}{3pt}\setlength{\parskip}{0pt}
+  \item \textbf{Programação defensiva e integridade relacional:} todas as junções críticas especificam \code{validate="one\_to\_one"} ou \code{validate="many\_to\_one"}, e \code{exigir\_colunas} interrompe a execução diante de qualquer alteração de esquema nos CSVs, evitando multiplicação silenciosa de linhas.
+  \item \textbf{Imputação seletiva e transparência de lacunas:} apenas contagens (\code{quantidade\_*}) recebem preenchimento com zero; denominadores populacionais nulos ou ausentes retornam \code{NaN}. Na Pergunta 1, a ausência de população estadual em 2023--2024 é tratada com \code{ffill()} e aviso impresso explícito.
+  \item \textbf{Recorte por AISP, denominador feminino e pessoas-ano (P2):} a opção por AISP compatibiliza a letalidade geral com a base de feminicídio (CISP/AISP) e desagrega a Capital. Na ausência de população por sexo, adotou-se a aproximação de 50\% de população feminina (\code{fator=200\_000}); para estabilizar eventos raros, os rankings usam taxas ponderadas por pessoas-ano em 2017--2022.
+  \item \textbf{Ajuste de calendário na sazonalidade (P3):} somas mensais brutas penalizam fevereiro (28,25 dias em média, quase 10\% mais curto que meses de 31 dias). A conversão em média diária e a normalização em Índice Base 100 removem esse viés.
+  \item \textbf{Janela regional, dispersão e reconstrução de contagens (P4):} os nomes de região são normalizados via \code{normalizar\_regiao\_p4} (\code{unicodedata}) e a janela comum das quatro regiões é inferida automaticamente como \textbf{2000--2022} para o cálculo do coeficiente de variação regional (CV) e da participação percentual anual das ocorrências. Para evitar distorções de separador de milhar lido como decimal em \code{contagem\_delito}, as contagens regionais (\code{contagem\_p4}) são reconstruídas a partir de $\text{taxa} \times \text{população} / 100\,000$ com validação de soma igual a 100\%. A janela \textbf{2003--2022} é preservada para os extremos históricos, a variação acumulada e a razão Máx/Mín, alinhada ao recorte das séries por CISP/AISP nas demais perguntas.
+  \item \textbf{Clusterização robusta por medianas e teste de Spearman (P5):} a divisão em quadrantes pelas medianas de fuzis e de MDIP evita distorção por outliers; a correlação de Spearman sobre a taxa proporcional de fuzis confirma que a associação não é artefato do tamanho populacional.
+  \item \textbf{Estimativa populacional municipal por identidade oficial (P6):} para estender a seleção dos 6 municípios mais populosos até 2024 (além do corte de 2022 das bases populacionais isoladas), inverte-se a identidade oficial entre contagem e taxa de registros de ocorrência.
+  \item \textbf{Primeiras diferenças em defasagens temporais (P7):} para separar tendência secular compartilhada de resposta imediata no mês seguinte, calcula-se a correlação cruzada em primeiras diferenças mensais ($\Delta X_t$ vs.\ $\Delta Y_{t+k}$) contra a banda aproximada de ruído branco ($\pm 1{,}96 / \sqrt{n}$).
+\end{itemize}
+
+As formulações matemáticas centrais implementadas no código são:
+\begin{align}
+  T_{\text{letalidade}} &= \frac{\sum \text{ocorrências}}{\sum \text{população}} \times 100\,000, \qquad
+  T_{\text{feminicídio}} = \frac{\sum F}{\sum (P / 2)} \times 100\,000 = \frac{\sum F}{\sum P} \times 200\,000, \\[4pt]
+  I_{\text{sazonal}}(r, m) &= \frac{D_{r,m}}{\frac{1}{12}\sum_{j=1}^{12} D_{r,j}} \times 100, \quad \text{com } D_{r,m} = \frac{\text{Ocorrências}_{r,m}}{\text{Dias\_médios}_m}, \\[4pt]
+  \widehat{P}_{\text{mun}} &= \frac{\text{ROs}}{\text{Taxa\_RO}} \times 100\,000, \qquad
+  \text{Corr}_{\Delta}(k) = \text{Corr}(\Delta X_t,\, \Delta Y_{t+k}), \quad k \in \{0,1,2,3\}.
+\end{align}
+
+\subsection{Decisões de Design das Visualizações}
+\begin{itemize}
+  \setlength{\itemsep}{3pt}\setlength{\parskip}{0pt}
+  \item \textbf{Acessibilidade e identidade cromática fixa:} adotou-se a paleta \textbf{Okabe-Ito} (segura para daltonismo) com mapeamento invariável por região (\code{PALETA\_REGIOES}) em todo o projeto.
+  \item \textbf{Divisão entre bibliotecas estáticas e interativas:} mapas coropléticos (P2 e P5) e séries que se beneficiam de zoom, \textit{hover} unificado, animações ou filtragem por legenda (P3, todos os gráficos da P4 --- trajetórias 1991--2022, coeficiente de variação 2000--2022 e participação regional animada por ano ---, P6 e P7) foram construídos em \textbf{Plotly}; painéis comparativos densos (2$\times$2 de P1, barras Top 10 e dispersões de P2, heatmap de P3, pequenos múltiplos de P6 e correlograma de P7) foram construídos em \textbf{Matplotlib/Seaborn}.
+  \item \textbf{Evitar eixos Y duplos na P1 vs.\ escalas uniformes na P6:} na P1, volumes totais (milhares) e fuzis (centenas) foram separados em painéis próprios e comparados via \textbf{Índice Base 100}, evitando distorções de eixo duplo. Na P6, o uso de \code{twinx()} nos pequenos múltiplos 2$\times$3 emprega \textbf{escalas idênticas nos seis painéis} e rótulos explícitos em ambos os eixos verticais para preservar comparabilidade direta.
+  \item \textbf{Controle de outliers e contraste em mapas:} nos mapas animados de P2, o teto da escala contínua (\code{YlOrRd} e \code{PuRd}) foi limitado ao \textbf{percentil 98} para preservar contraste territorial. Em P5, o Cluster 4 usa cinza médio (\code{\#B0B0B0}) para manter legibilidade sobre o mapa base claro (\code{carto-positron}).
+  \item \textbf{Contexto histórico, incerteza e acabamento:} foram adicionados marcos históricos verticais (UPPs em 2008, crise fiscal em 2016 e Covid-19/ADPF 635 em 2020) em P1 e P4; contagem absoluta $n$ nas barras de feminicídio de P2 para sinalizar amostras pequenas; rotulagem seletiva apenas dos destaques do Cluster 1 no gráfico de dispersão de P5 para evitar sobreposição; remoção de bordas superiores/direitas e grades verticais; formatação numérica brasileira (\code{formatar\_numero}); e rodapé uniforme com a fonte ISP-RJ em todas as figuras (\code{adicionar\_fonte\_plotly}).
+\end{itemize}
+
+\section{Referência Completa das Funções}
+
+Todas as 13 funções do projeto seguem docstrings no padrão PEP 257 (estilo Google).
+
+\subsection{Utilitários de Validação, Cálculo e Formatação}
+
+\funcblock{exigir\_colunas(base: pd.DataFrame, colunas: list[str], nome\_base: str) -> None}
+  {Valida a presença de todas as colunas obrigatórias antes de qualquer agregação ou cruzamento.}
+  {\code{base} (DataFrame alvo), \code{colunas} (nomes exigidos), \code{nome\_base} (rótulo para diagnóstico).}
+  {\code{None}.}
+  {\code{KeyError}, listando em ordem alfabética as colunas ausentes.}
+
+\funcblock{taxa\_por\_100\_mil(quantidade: pd.Series, populacao: pd.Series, fator: int = FATOR\_TAXA) -> pd.Series}
+  {Calcula taxas padronizadas por população, retornando \code{NaN} quando o denominador é ausente, nulo ou negativo.}
+  {\code{quantidade} (contagens), \code{populacao} (denominador), \code{fator} (padrão \code{100\_000}; \code{200\_000} no feminicídio).}
+  {\code{pd.Series} numérica com as taxas calculadas.}
+  {Nenhuma (tratamento seguro via \code{where(populacao > 0)}).}
+
+\funcblock{agregar\_contagens\_aisp\_ano(base: pd.DataFrame, colunas\_contagem: list[str]) -> pd.DataFrame}
+  {Agrega colunas de contagem por \code{(ano, id\_aisp)} via soma após validar o esquema de entrada.}
+  {\code{base} (DataFrame de ocorrências), \code{colunas\_contagem} (lista de métricas numéricas).}
+  {\code{pd.DataFrame} com uma única linha por par \code{(ano, id\_aisp)}.}
+  {\code{KeyError} via \code{exigir\_colunas}.}
+
+\funcblock{formatar\_numero(valor: float, casas: int = 1, sinal: bool = False) -> str}
+  {Formata números no padrão brasileiro (ponto para milhar e vírgula decimal) para rótulos gráficos Matplotlib.}
+  {\code{valor} (número), \code{casas} (casas decimais), \code{sinal} (exibe \code{+} em positivos se \code{True}).}
+  {\code{str} formatada.}
+  {Nenhuma.}
+
+\funcblock{adicionar\_fonte\_plotly(fig: go.Figure, texto: str = FONTE\_PADRAO, y: float = -0.16) -> go.Figure}
+  {Insere anotação padronizada de fonte institucional no rodapé de figuras interativas Plotly.}
+  {\code{fig} (figura alvo), \code{texto} (atribuição), \code{y} (posição vertical em coordenadas \code{paper}).}
+  {A própria instância \code{go.Figure} atualizada.}
+  {Nenhuma.}
+
+\subsection{Ingestão, Limpeza e Sumarização}
+
+\funcblock{carregar\_csvs\_do\_repositorio(url\_zip: str, pasta\_dados: str, prefixo: str) -> dict[str, pd.DataFrame]}
+  {Baixa o arquivo \code{.zip} do GitHub em memória e carrega todos os CSVs da pasta de dados com detecção automática de separador.}
+  {\code{url\_zip} (URL do ZIP), \code{pasta\_dados} (subcaminho filtrado), \code{prefixo} (prefixo removido dos nomes).}
+  {\code{dict[str, pd.DataFrame]} mapeando nome padronizado da base ao DataFrame bruto.}
+  {\code{requests.HTTPError}; \code{ValueError} se houver chave duplicada ou nenhum CSV.}
+
+\funcblock{limpar\_bases\_isp(bases: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]}
+  {Produz cópias tratadas das bases: limpa espaços, corrige \code{regiao}, imputa zero em \code{quantidade\_*}, tipifica \code{ano}/\code{mes} e deriva \code{data}.}
+  {\code{bases} (dicionário de DataFrames brutos).}
+  {\code{dict[str, pd.DataFrame]} com todas as bases padronizadas.}
+  {\code{ValueError} se \code{ano}, \code{mes} ou \code{data} contiverem valores inválidos.}
+
+\funcblock{carregar\_shapefile\_github(nome\_zip: str, chave\_padrao: str, tolerancia: float = 0.005) -> gpd.GeoDataFrame}
+  {Baixa shapefile compactado via arquivo temporário seguro, padroniza a chave territorial como \code{int64}, reprojeta para \code{EPSG:4326} e simplifica geometrias.}
+  {\code{nome\_zip} (arquivo ZIP), \code{chave\_padrao} (ex.: \code{"id\_aisp"}), \code{tolerancia} (em graus; \code{None} desativa simplificação).}
+  {\code{gpd.GeoDataFrame} pronto para mapas coropléticos.}
+  {\code{requests.HTTPError}, \code{KeyError} (chave ausente) e \code{ValueError} (CRS indefinido).}
+
+\funcblock{resumir\_taxas\_por\_ano(painel: pd.DataFrame, coluna\_taxa: str = "taxa\_letalidade") -> pd.DataFrame}
+  {Computa a distribuição anual entre AISPs: média, mediana, mínimo, máximo, Q1, Q3, desvio-padrão (\code{ddof=0}), variância, amplitude interquartil e coeficiente de variação (\%).}
+  {\code{painel} (DataFrame AISP--ano), \code{coluna\_taxa} (métrica alvo).}
+  {\code{pd.DataFrame} com uma linha por ano.}
+  {\code{KeyError} via \code{exigir\_colunas}.}
+
+\subsection{Funções Auxiliares de Visualização, Normalização e Classificação}
+
+\funcblock{anotar\_ponto(ax, df, col\_y, idx, texto, dy=10, dx=0, cor=PALETA["cinza\_escuro"])}
+  {Destaca picos e vales nos gráficos de linha da Pergunta 1 com caixa branca semitransparente.}
+  {\code{ax}, \code{df}, \code{col\_y}, \code{idx}, \code{texto}, \code{dy}, \code{dx}, \code{cor}.}
+  {\code{None}.}
+  {Nenhuma.}
+
+\funcblock{adicionar\_marcos\_historicos(ax, marcos, exibir\_rotulos=False, y\_frac=0.96, va="top")}
+  {Desenha linhas verticais pontilhadas e rótulos contextuais (UPPs em 2008, crise fiscal em 2016 e Covid-19/ADPF 635 em 2020) nos quatro painéis da Pergunta 1.}
+  {\code{ax}, \code{marcos} (lista de tuplas \code{(ano, rotulo)}), \code{exibir\_rotulos}, \code{y\_frac}, \code{va}.}
+  {\code{None}.}
+  {Nenhuma.}
+
+\funcblock{normalizar\_regiao\_p4(valor: object) -> str}
+  {Normaliza o nome de uma região na Pergunta 4 removendo acentos (\code{unicodedata.normalize("NFKD", ...)}), padronizando caixa e removendo espaços extras.}
+  {\code{valor} (texto ou objeto representando o nome da região na base de dados).}
+  {\code{str} normalizada em minúsculas, sem acentuação e sem espaços nas extremidades.}
+  {Nenhuma.}
+
+\funcblock{classificar\_cluster(row: pd.Series) -> str}
+  {Atribui cada AISP a um dos quatro quadrantes da Pergunta 5 comparando \code{quantidade\_fuzil} e \code{taxa\_mdip\_100k} às respectivas medianas.}
+  {\code{row} (linha de \code{painel\_p5}).}
+  {\code{str} com o rótulo do cluster (\code{Cluster 1} a \code{Cluster 4}).}
+  {Nenhuma.}
+
+\end{document}
