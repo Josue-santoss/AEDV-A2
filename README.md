@@ -1,2 +1,1 @@
-# AEDV-A2-
-Teste
+Guia para melhor entendimento do projeto
