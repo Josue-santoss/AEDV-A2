@@ -62,9 +62,9 @@ O estudo é **estritamente descritivo e exploratório**: os padrões e associaç
 ├── Projeto/
 │   ├── Datas/
 │   ├── Declaração de Contribuição - Projeto AEDV A2
-│   ├── NotebookAEDV.ipynb
 │   ├── comando_do_trabalho.pdf
 │   └── projeto_seguranca_publica.pdf
+├── NotebookAEDV.ipynb
 ├── NotebookArtigo.html
 ├── NotebookArtigo.ipynb
 └── README.md
