@@ -48,6 +48,41 @@ O estudo é **estritamente descritivo e exploratório**: os padrões e associaç
 - **Municípios (P6):** a participação da MDIP chegou a 55,7% em Niterói (2023) e 48,7% em São Gonçalo (2021); em Campos dos Goytacazes o máximo foi 3,6%.
 - **Policiais mortos (P7):** em nível, a correlação com a letalidade no mês seguinte é 0,415 (tendência histórica compartilhada); em primeiras diferenças, cai para 0,005.
 
+---
+ 
+## Estrutura do repositório
+ 
+```
+.
+├── .vscode/
+│   └── settings.json
+├── Documentação/
+│   ├── documentacao.pdf
+│   └── documentacao.tex
+├── Projeto/
+│   ├── Datas/
+│   ├── Declaração de Contribuição - Projeto AEDV A2
+│   ├── NotebookAEDV.ipynb
+│   ├── comando_do_trabalho.pdf
+│   └── projeto_seguranca_publica.pdf
+├── NotebookArtigo.html
+├── NotebookArtigo.ipynb
+└── README.md
+```
+ 
+| Arquivo / pasta | Conteúdo |
+|---|---|
+| `Projeto/NotebookAEDV.ipynb` | Notebook exploratório completo: 15 etapas de preparação e auditoria de dados, seguidas das sete perguntas, com tabelas intermediárias e mapas interativos com mapa base. |
+| `NotebookArtigo.ipynb` | Versão em formato de artigo, para publicação via Quarto, com mapas vetoriais autocontidos. |
+| `NotebookArtigo.html` | Artigo renderizado (HTML autocontido gerado pelo Quarto). |
+| `Documentação/documentacao.tex` e `.pdf` | Documentação técnica e metodológica do código (arquitetura, pipeline, decisões metodológicas e referência das 13 funções). |
+| `Projeto/Datas/` | CSVs do ISP-RJ e shapefiles compactados (`CISP.zip`, `AISP.zip`, `RISP.zip`). |
+| `Projeto/Declaração de Contribuição - Projeto AEDV A2` | Declaração de contribuição do grupo. |
+| `Projeto/comando_do_trabalho.pdf` | Enunciado oficial e rubrica de avaliação. |
+| `Projeto/projeto_seguranca_publica.pdf` | Proposta inicial (Marco 1). |
+| `.vscode/settings.json` | Configurações do editor para o projeto. |
+ 
+--
 
 ## Dados
 
